@@ -19,6 +19,47 @@ import java.lang.Math.*
 import java.util.*
 import kotlin.random.Random
 
+
+class KalmanFilter2D(
+    private var x: Double = 0.0,
+    private var y: Double = 0.0,
+    private var vx: Double = 0.0,
+    private var vy: Double = 0.0
+) {
+    private val dt = 0.05 // Time interval (50ms)
+    private val processNoise = 1e-2
+    private val measurementNoise = 0.05
+    private val q = processNoise
+    private val r = measurementNoise
+
+    private var px = 1.0
+    private var py = 1.0
+
+    fun update(zx: Double, zy: Double): Pair<Double, Double> {
+        // Predict
+        x += vx * dt
+        y += vy * dt
+        px += q
+        py += q
+
+        // Update
+        val kx = px / (px + r)
+        val ky = py / (py + r)
+
+        x += kx * (zx - x)
+        y += ky * (zy - y)
+
+        vx = (zx - x) / dt
+        vy = (zy - y) / dt
+
+        px *= (1 - kx)
+        py *= (1 - ky)
+
+        return Pair(x, y)
+    }
+}
+
+
 class MainActivity : AppCompatActivity() {
     private lateinit var editTextW: EditText
     private lateinit var editTextR: EditText
@@ -29,6 +70,7 @@ class MainActivity : AppCompatActivity() {
     private var crashDetectionJob: Job? = null
     private val positions = mutableListOf<Pair<Double, Double>>()
     private val intervalMillis = 50L // 0.05 seconds
+    private var kalmanFilter = KalmanFilter2D()
 
     private var r1Latest = 100.0
     private var r2Latest = 100.0
@@ -110,7 +152,9 @@ class MainActivity : AppCompatActivity() {
                 val r1 = r1Latest
                 val r2 = r2Latest
 
-                val (x, y) = trilateration(r1, r2, w, offset1=-0.15, offset2=-0.15)
+                // val (x, y) = trilateration(r1, r2, w, offset1=-0.15, offset2=-0.15)
+                val (rawX, rawY) = trilateration(r1, r2, w, offset1 = -0.15, offset2 = -0.15)
+                val (x, y) = kalmanFilter.update(rawX, rawY)
 
                 positions.add(Pair(x, y))
                 if (positions.size > 40) positions.removeAt(0) // keep 2 sec of data
