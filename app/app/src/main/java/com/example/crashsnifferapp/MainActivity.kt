@@ -20,46 +20,6 @@ import java.util.*
 import kotlin.random.Random
 
 
-class KalmanFilter2D(
-    private var x: Double = 0.0,
-    private var y: Double = 0.0,
-    private var vx: Double = 0.0,
-    private var vy: Double = 0.0
-) {
-    private val dt = 0.05 // Time interval (50ms)
-    private val processNoise = 1e-2
-    private val measurementNoise = 0.05
-    private val q = processNoise
-    private val r = measurementNoise
-
-    private var px = 1.0
-    private var py = 1.0
-
-    fun update(zx: Double, zy: Double): Pair<Double, Double> {
-        // Predict
-        x += vx * dt
-        y += vy * dt
-        px += q
-        py += q
-
-        // Update
-        val kx = px / (px + r)
-        val ky = py / (py + r)
-
-        x += kx * (zx - x)
-        y += ky * (zy - y)
-
-        vx = (zx - x) / dt
-        vy = (zy - y) / dt
-
-        px *= (1 - kx)
-        py *= (1 - ky)
-
-        return Pair(x, y)
-    }
-}
-
-
 class MainActivity : AppCompatActivity() {
     private lateinit var editTextW: EditText
     private lateinit var editTextR: EditText
@@ -70,10 +30,10 @@ class MainActivity : AppCompatActivity() {
     private var crashDetectionJob: Job? = null
     private val positions = mutableListOf<Pair<Double, Double>>()
     private val intervalMillis = 50L // 0.05 seconds
-    private var kalmanFilter = KalmanFilter2D()
 
     private var r1Latest = 100.0
     private var r2Latest = 100.0
+    private var collisionCount = 0L
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothSocket: BluetoothSocket? = null
@@ -144,8 +104,8 @@ class MainActivity : AppCompatActivity() {
         crashDetectionJob = CoroutineScope(Dispatchers.Default).launch {
             positions.clear()
             while (isActive) {
-                val w = editTextW.text.toString().toDoubleOrNull() ?: 0.6
-                val r = editTextR.text.toString().toDoubleOrNull() ?: 1.5
+                val w = editTextW.text.toString().toDoubleOrNull() ?: 0.5
+                val r = editTextR.text.toString().toDoubleOrNull() ?: 2.0
 
 //                val r1 = Random.nextDouble(50.0, 150.0)
 //                val r2 = Random.nextDouble(50.0, 150.0)
@@ -153,8 +113,17 @@ class MainActivity : AppCompatActivity() {
                 val r2 = r2Latest
 
                 // val (x, y) = trilateration(r1, r2, w, offset1=-0.15, offset2=-0.15)
-                val (rawX, rawY) = trilateration(r1, r2, w, offset1 = -0.15, offset2 = -0.15)
-                val (x, y) = kalmanFilter.update(rawX, rawY)
+
+                if ((r1 >= 60000) || (r2 >= 60000)) continue
+
+                val (x, y) = trilateration(r1, r2, w, offset1 = -0.15, offset2 = -0.15)
+
+                if ((x < -100) or (y < -100) or x.isNaN() or y.isNaN()) continue
+
+                withContext(Dispatchers.Main) {
+                    Log.i("BLUETOOTH", r1.toString() + " " + r2.toString() + " " + x.toString() + " " + y.toString() + "\n")
+                    bluetoothStatus.text = "r1:%.2f, r2:%.2f, x:%.2f, y:%.2f".format(r1, r2, x, y)
+                }
 
                 positions.add(Pair(x, y))
                 if (positions.size > 40) positions.removeAt(0) // keep 2 sec of data
@@ -168,14 +137,19 @@ class MainActivity : AppCompatActivity() {
 
 //                    val futureX = x2 + dx * 20 * 1.5 // 1.5 seconds
 //                    val futureY = y2 + dy * 20 * 1.5
-                    val t = editTextT.text.toString().toDoubleOrNull() ?: 1.5
+                    val t = editTextT.text.toString().toDoubleOrNull() ?: 1.0
                     val steps = (t * 1000 / intervalMillis).toInt()
                     val futureX = x2 + dx * steps
                     val futureY = y2 + dy * steps
 
                     val distance = distanceToOriginFromPath(x2, y2, futureX, futureY)
+                    if (distance < r)
+                        collisionCount += 1
+                    else
+                        collisionCount = 0
+
                     withContext(Dispatchers.Main) {
-                        if (distance < r) {
+                        if (collisionCount >= 7) {
                             resultText.text = "⚠️ WARNING: \nCollision Likely!"
                             resultText.setBackgroundColor(getColor(android.R.color.holo_red_dark))
                         } else {
@@ -229,9 +203,12 @@ class MainActivity : AppCompatActivity() {
                     bytes = inputStream.read(buffer)
                     val incoming = String(buffer, 0, bytes).trim()
                     val parsed = parseSensorData(incoming)
+                    val ema = 0.7
                     parsed?.let { (r1, r2) ->
-                        r1Latest = r1
-                        r2Latest = r2
+                        if ((r1 < 60000) and (r2 < 60000)) {
+                            r1Latest = r1*ema + r1Latest*(1-ema)
+                            r2Latest = r2*ema + r2Latest*(1-ema)
+                        }
                     }
                 } catch (e: Exception) {
                     break // handle disconnect gracefully
@@ -246,8 +223,6 @@ class MainActivity : AppCompatActivity() {
             val parts = input.split(",")
             val r1 = parts[0].split(":")[1].toDouble()
             val r2 = parts[1].split(":")[1].toDouble()
-            Log.i("BLUETOOTH", r1.toString() + " " + r2.toString())
-            bluetoothStatus.text = "Connected / r1: ${r1}, r2: ${r2}"
             Pair(r1, r2)
         } catch (e: Exception) {
             null
