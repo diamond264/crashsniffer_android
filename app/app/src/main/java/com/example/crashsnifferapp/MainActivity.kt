@@ -50,7 +50,8 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val requiredPermissions = arrayOf(
                 Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_SCAN
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADMIN,
             )
             val missing = requiredPermissions.filter {
                 ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -77,7 +78,8 @@ class MainActivity : AppCompatActivity() {
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
 
         buttonScan.setOnClickListener {
-            scanBluetoothDevices()
+            // scanBluetoothDevices()
+            connectToRaspberryPiDirectly()
         }
 
         editTextW = findViewById(R.id.editTextW)
@@ -108,7 +110,7 @@ class MainActivity : AppCompatActivity() {
                 val r1 = r1Latest
                 val r2 = r2Latest
 
-                val (x, y) = trilateration(r1, r2, w)
+                val (x, y) = trilateration(r1, r2, w, offset1=-0.15, offset2=-0.15)
 
                 positions.add(Pair(x, y))
                 if (positions.size > 40) positions.removeAt(0) // keep 2 sec of data
@@ -195,10 +197,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun parseSensorData(input: String): Pair<Double, Double>? {
+        Log.i("BLUETOOTH", input)
         return try {
             val parts = input.split(",")
             val r1 = parts[0].split(":")[1].toDouble()
             val r2 = parts[1].split(":")[1].toDouble()
+            Log.i("BLUETOOTH", r1.toString() + " " + r2.toString())
+            bluetoothStatus.text = "Connected / r1: ${r1}, r2: ${r2}"
             Pair(r1, r2)
         } catch (e: Exception) {
             null
@@ -250,6 +255,36 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     bluetoothStatus.text = "Connection failed"
                     Toast.makeText(this@MainActivity, "Connection failed", Toast.LENGTH_SHORT).show()
+                }
+                e.printStackTrace()
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun connectToRaspberryPiDirectly() {
+        val rpiMacAddress = "B8:27:EB:2F:5E:19" // <- replace with your Pi’s actual MAC address
+        val device = bluetoothAdapter?.getRemoteDevice(rpiMacAddress)
+        val uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB") // SPP UUID
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                bluetoothSocket = device?.createRfcommSocketToServiceRecord(uuid)
+                bluetoothAdapter?.cancelDiscovery()
+                bluetoothSocket?.connect()
+
+                withContext(Dispatchers.Main) {
+                    bluetoothStatus.text = "Connected to RPi"
+                    Toast.makeText(this@MainActivity, "Connected to Raspberry Pi!", Toast.LENGTH_SHORT).show()
+                }
+
+                inputStream = bluetoothSocket?.inputStream
+                inputStream?.let { startBluetoothReading(it) }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    bluetoothStatus.text = "Connection failed"
+                    Toast.makeText(this@MainActivity, "Failed to connect", Toast.LENGTH_SHORT).show()
                 }
                 e.printStackTrace()
             }
