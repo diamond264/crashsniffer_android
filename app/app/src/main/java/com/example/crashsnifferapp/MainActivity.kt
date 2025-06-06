@@ -127,7 +127,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCrashDetection() {
         crashDetectionJob = CoroutineScope(Dispatchers.Default).launch {
+            // Initialize
             positions.clear()
+            collisionCount = 0
+            r1Latest = 60000
+            r2Latest = 60000
+            
             while (isActive) {
                 val w = editTextW.text.toString().toDoubleOrNull() ?: 0.5
                 val r = editTextR.text.toString().toDoubleOrNull() ?: 2.0
@@ -154,7 +159,7 @@ class MainActivity : AppCompatActivity() {
                 if (positions.size > 10) positions.removeAt(0) // keep 0.5 sec of data
 
                 if (positions.size >= 2) {
-                    val (x1, y1) = positions.first()
+                    // val (x1, y1) = positions.first()
                     val (x2, y2) = positions.last()
 
                     val smoothed = smoothVectors(computeStepVectors(positions))
@@ -175,7 +180,7 @@ class MainActivity : AppCompatActivity() {
                     val distance = distanceToOriginFromPath(x2, y2, futureX, futureY)
                     if (distance < r)
                         collisionCount += 1
-                    else
+                    else if (collisionCount < 3)
                         collisionCount = 0
 
                     withContext(Dispatchers.Main) {
@@ -201,6 +206,7 @@ class MainActivity : AppCompatActivity() {
         crashDetectionJob = null
         buttonStart.text = "Start Crash Detection"
         resultText.text = ""
+        resultText.setBackgroundColor(Color.parseColor("#888888"))
     }
 
     private fun trilateration(r1: Double, r2: Double, w: Double, offset1: Double = 0.1, offset2: Double = 0.1): Pair<Double, Double> {
