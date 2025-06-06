@@ -31,10 +31,11 @@ class MainActivity : AppCompatActivity() {
 
     private var crashDetectionJob: Job? = null
     private val positions = mutableListOf<Pair<Double, Double>>()
-    private val intervalMillis = 50L // 0.05 seconds
+    private val INTERVAL_MILLIS = 50L // 0.05 seconds
+    private val CONSECUTIVE_COUNTS = 3L  // Detect collision when repeatedly detected
 
-    private var r1Latest = 100.0
-    private var r2Latest = 100.0
+    private var r1Latest = 60000.0
+    private var r2Latest = 60000.0
     private var collisionCount = 0L
 
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -173,18 +174,18 @@ class MainActivity : AppCompatActivity() {
 //                    val futureX = x2 + dx * 20 * 1.5 // 1.5 seconds
 //                    val futureY = y2 + dy * 20 * 1.5
                     val t = editTextT.text.toString().toDoubleOrNull() ?: 1.0
-                    val steps = (t * 1000 / intervalMillis).toDouble()
+                    val steps = (t * 1000 / INTERVAL_MILLIS).toDouble()
                     val futureX = x2 + dx * steps
                     val futureY = y2 + dy * steps
 
                     val distance = distanceToOriginFromPath(x2, y2, futureX, futureY)
                     if (distance < r)
                         collisionCount += 1
-                    else if (collisionCount < 3)
+                    else if (collisionCount < CONSECUTIVE_COUNTS)
                         collisionCount = 0
 
                     withContext(Dispatchers.Main) {
-                        if (collisionCount >= 3) {
+                        if (collisionCount >= CONSECUTIVE_COUNTS) {
                             resultText.text = "⚠️ WARNING: \nCollision Likely!"
                             resultText.setBackgroundColor(getColor(android.R.color.holo_red_dark))
                             playWarningBeepRepeatedly()
@@ -195,7 +196,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                delay(intervalMillis)
+                delay(INTERVAL_MILLIS)
             }
         }
     }
