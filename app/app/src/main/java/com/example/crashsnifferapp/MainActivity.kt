@@ -18,6 +18,8 @@ import java.io.InputStream
 import java.lang.Math.*
 import java.util.*
 import kotlin.random.Random
+import android.media.AudioManager
+import android.media.ToneGenerator
 
 
 class MainActivity : AppCompatActivity() {
@@ -44,6 +46,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviceList: ListView
     private val deviceNames = mutableListOf<String>()
     private lateinit var deviceAdapter: ArrayAdapter<String>
+
+    private var warningBeepJob: Job? = null
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -177,9 +182,11 @@ class MainActivity : AppCompatActivity() {
                         if (collisionCount >= 3) {
                             resultText.text = "⚠️ WARNING: \nCollision Likely!"
                             resultText.setBackgroundColor(getColor(android.R.color.holo_red_dark))
+                            playWarningBeepRepeatedly()
                         } else {
                             resultText.text = "✅ SAFE"
                             resultText.setBackgroundColor(getColor(android.R.color.holo_green_dark))
+                            stopWarningBeep()
                         }
                     }
                 }
@@ -190,6 +197,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopCrashDetection() {
         crashDetectionJob?.cancel()
+        stopWarningBeep()
         crashDetectionJob = null
         buttonStart.text = "Start Crash Detection"
         resultText.text = ""
@@ -217,6 +225,27 @@ class MainActivity : AppCompatActivity() {
         val closestX = x1 + u * px
         val closestY = y1 + u * py
         return sqrt(closestX * closestX + closestY * closestY)
+    }
+
+    fun playWarningBeep(durationMs: Int = 500) {
+        val toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, durationMs)
+    }
+
+    fun playWarningBeepRepeatedly() {
+        if (warningBeepJob != null) return // already running
+
+        warningBeepJob = CoroutineScope(Dispatchers.Default).launch {
+            while (isActive) {
+                playWarningBeep()
+                delay(1000L) // beep every 1 second
+            }
+        }
+    }
+
+    fun stopWarningBeep() {
+        warningBeepJob?.cancel()
+        warningBeepJob = null
     }
 
     private fun startBluetoothReading(inputStream: InputStream) {
