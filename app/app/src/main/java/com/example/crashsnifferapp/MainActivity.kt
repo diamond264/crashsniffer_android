@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -131,8 +132,8 @@ class MainActivity : AppCompatActivity() {
             // Initialize
             positions.clear()
             collisionCount = 0
-            r1Latest = 60000
-            r2Latest = 60000
+            r1Latest = 60000.0
+            r2Latest = 60000.0
             
             while (isActive) {
                 val w = editTextW.text.toString().toDoubleOrNull() ?: 0.5
