@@ -100,6 +100,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun computeStepVectors(points: List<Pair<Double, Double>>): List<Pair<Double, Double>> {
+        // Return raw dx, dy between each pair of consecutive points
+        return (1 until points.size).map { i ->
+            val dx = points[i].first - points[i - 1].first
+            val dy = points[i].second - points[i - 1].second
+            Pair(dx, dy)
+        }
+    }
+
+    fun smoothVectors(vectors: List<Pair<Double, Double>>, windowSize: Int = 5): List<Pair<Double, Double>> {
+        return vectors.mapIndexed { i, _ ->
+            val start = maxOf(0, i - windowSize / 2)
+            val end = minOf(vectors.size, i + windowSize / 2 + 1)
+            val window = vectors.subList(start, end)
+            val avgDx = window.map { it.first }.average()
+            val avgDy = window.map { it.second }.average()
+            Pair(avgDx, avgDy)
+        }
+    }
+
     private fun startCrashDetection() {
         crashDetectionJob = CoroutineScope(Dispatchers.Default).launch {
             positions.clear()
@@ -126,19 +146,24 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 positions.add(Pair(x, y))
-                if (positions.size > 40) positions.removeAt(0) // keep 2 sec of data
+                if (positions.size > 10) positions.removeAt(0) // keep 0.5 sec of data
 
                 if (positions.size >= 2) {
                     val (x1, y1) = positions.first()
                     val (x2, y2) = positions.last()
 
-                    val dx = (x2 - x1) / positions.size
-                    val dy = (y2 - y1) / positions.size
+                    val smoothed = smoothVectors(computeStepVectors(positions))
+                    val avgDx = smoothed.map { it.first }.average()
+                    val avgDy = smoothed.map { it.second }.average()
+                    val dx = avgDx
+                    val dy = avgDy
+//                    val dx = (x2 - x1) / positions.size
+//                    val dy = (y2 - y1) / positions.size
 
 //                    val futureX = x2 + dx * 20 * 1.5 // 1.5 seconds
 //                    val futureY = y2 + dy * 20 * 1.5
                     val t = editTextT.text.toString().toDoubleOrNull() ?: 1.0
-                    val steps = (t * 1000 / intervalMillis).toInt()
+                    val steps = (t * 1000 / intervalMillis).toDouble()
                     val futureX = x2 + dx * steps
                     val futureY = y2 + dy * steps
 
@@ -149,7 +174,7 @@ class MainActivity : AppCompatActivity() {
                         collisionCount = 0
 
                     withContext(Dispatchers.Main) {
-                        if (collisionCount >= 7) {
+                        if (collisionCount >= 3) {
                             resultText.text = "⚠️ WARNING: \nCollision Likely!"
                             resultText.setBackgroundColor(getColor(android.R.color.holo_red_dark))
                         } else {
@@ -203,7 +228,7 @@ class MainActivity : AppCompatActivity() {
                     bytes = inputStream.read(buffer)
                     val incoming = String(buffer, 0, bytes).trim()
                     val parsed = parseSensorData(incoming)
-                    val ema = 0.7
+                    val ema = 0.4
                     parsed?.let { (r1, r2) ->
                         if ((r1 < 60000) and (r2 < 60000)) {
                             r1Latest = r1*ema + r1Latest*(1-ema)
