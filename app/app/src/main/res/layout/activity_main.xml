@@ -102,10 +102,10 @@
 
     <Button
         android:id="@+id/buttonScan"
-        android:text="Scan Bluetooth Devices"
-        android:layout_marginTop="8dp"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="BLUETOOTH CONNECT" />
 
     <ListView
         android:id="@+id/deviceList"
